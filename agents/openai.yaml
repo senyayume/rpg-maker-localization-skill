@@ -1,0 +1,4 @@
+interface:
+  display_name: "RPG Maker 汉化"
+  short_description: "审计、续译、审查并验证 RPG Maker MV/MZ 汉化项目"
+  default_prompt: "Use $rpg-maker-localization to continue or review this RPG Maker MV/MZ Simplified Chinese localization safely."

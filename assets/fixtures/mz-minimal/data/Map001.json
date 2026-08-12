@@ -1,0 +1,1 @@
+{"displayName":"Village","events":[null,{"pages":[{"list":[{"code":101,"parameters":["",0,0,2,"Atla"]},{"code":401,"parameters":["Wait, \\N[1]!"]},{"code":102,"parameters":[["Save","Leave"],0,0,2,0]},{"code":402,"parameters":[0,"Save"]},{"code":357,"parameters":["DTextPicture","dText","Display text",{"text":"Status"}]}]}]}]}
