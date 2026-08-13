@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -43,6 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     accept_parser = subparsers.add_parser("accept")
     accept_parser.add_argument("--workspace", type=Path, required=True)
     accept_parser.add_argument("--mapping", type=Path, required=True)
+    accept_parser.add_argument("--review", type=Path)
     for name in ("generate", "verify"):
         child = subparsers.add_parser(name)
         child.add_argument("--workspace", type=Path, required=True)
@@ -156,6 +158,13 @@ def _dispatch(arguments: argparse.Namespace) -> dict[str, Any]:
     if arguments.command in {"validate", "accept"}:
         mapping = _read_json(arguments.mapping)
         report = validate_mapping(prepared, mapping)
+        report["review_binding"] = {
+            "source_fingerprint": machine["source_fingerprint"],
+            "task_set_hash": prepared["task_set_hash"],
+            "mapping_hash": _mapping_hash(mapping),
+            "reviewed_ids": [task["id"] for task in report["review_tasks"]],
+            "unresolved_ids": [],
+        }
         report_path = arguments.workspace / "reports" / "candidate-validation.json"
         _write_json(report_path, report)
         if arguments.command == "validate":
@@ -164,14 +173,41 @@ def _dispatch(arguments: argparse.Namespace) -> dict[str, Any]:
             return report
         if not report["ok"]:
             raise ValueError(f"cannot accept invalid candidate; see {report_path}")
+        review_tasks = {task["id"] for task in report["review_tasks"]}
+        quality_state = "technical-pass"
+        review_path = None
+        if review_tasks:
+            if arguments.review is None:
+                raise ValueError("review evidence is required for risk review tasks")
+            review = _read_json(arguments.review)
+            expected = {
+                "source_fingerprint": machine["source_fingerprint"],
+                "task_set_hash": prepared["task_set_hash"],
+                "mapping_hash": _mapping_hash(mapping),
+            }
+            for field, value in expected.items():
+                if review.get(field) != value:
+                    raise ValueError(f"review evidence {field} does not match current candidate")
+            reviewed_ids = set(review.get("reviewed_ids", []))
+            unresolved_ids = set(review.get("unresolved_ids", []))
+            if unresolved_ids:
+                raise ValueError("review evidence contains unresolved risk tasks")
+            if reviewed_ids != review_tasks:
+                raise ValueError("review evidence must cover exactly the current risk review tasks")
+            quality_state = "reviewed"
+            review_path = str(arguments.review.resolve())
         accepted_path = arguments.workspace / "translations" / "accepted" / "mapping.json"
         _write_json(accepted_path, mapping)
         record = {
             "accepted": len(mapping),
-            "quality_state": "technical-pass",
+            "quality_state": quality_state,
             "source_fingerprint": machine["source_fingerprint"],
+            "task_set_hash": prepared["task_set_hash"],
+            "mapping_hash": _mapping_hash(mapping),
             "tasks_file": str(prepared_path),
         }
+        if review_path is not None:
+            record["review_evidence"] = review_path
         _write_json(arguments.workspace / "translations" / "accepted" / "record.json", record)
         return record
     accepted_path = arguments.workspace / "translations" / "accepted" / "mapping.json"
@@ -179,7 +215,12 @@ def _dispatch(arguments: argparse.Namespace) -> dict[str, Any]:
         record = _read_json(arguments.workspace / "translations" / "accepted" / "record.json")
         if record.get("source_fingerprint") != machine.get("source_fingerprint"):
             raise ValueError("accepted mapping does not match the bound source fingerprint")
-        return generate_patch(game, prepared, _read_json(accepted_path), arguments.workspace / "dist")
+        if record.get("task_set_hash") != prepared.get("task_set_hash"):
+            raise ValueError("accepted mapping does not match the current task set")
+        accepted = _read_json(accepted_path)
+        if record.get("mapping_hash") != _mapping_hash(accepted):
+            raise ValueError("accepted mapping content does not match its acceptance record")
+        return generate_patch(game, prepared, accepted, arguments.workspace / "dist")
     if arguments.command == "verify":
         report = verify_patch(game, arguments.workspace / "dist", prepared)
         if not report["ok"]:
@@ -188,6 +229,13 @@ def _dispatch(arguments: argparse.Namespace) -> dict[str, Any]:
             raise ValueError(f"dist failed verification; see {report_path}")
         return report
     raise ValueError(f"unsupported command: {arguments.command}")
+
+
+def _mapping_hash(mapping: dict[str, Any]) -> str:
+    payload = json.dumps(
+        mapping, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _read_json(path: Path) -> Any:

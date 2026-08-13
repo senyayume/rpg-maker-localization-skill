@@ -1,3 +1,4 @@
+import hashlib
 import json
 import subprocess
 import tempfile
@@ -9,6 +10,150 @@ SCRIPT = Path(__file__).parents[1] / "rpg_localize.py"
 
 
 class CliTests(unittest.TestCase):
+    def test_cli_requires_bound_review_evidence_before_accepting_risk_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Game"
+            (game / "data").mkdir(parents=True)
+            (game / "js").mkdir()
+            (game / "js" / "rmmz_core.js").write_text("// MZ", encoding="utf-8")
+            (game / "data" / "Map001.json").write_text(
+                json.dumps(
+                    {
+                        "displayName": "",
+                        "events": [
+                            None,
+                            {
+                                "pages": [
+                                    {
+                                        "list": [
+                                            {"code": 102, "parameters": [["Leave"], 0, 0, 2, 0]},
+                                            {"code": 402, "parameters": [0, "Leave"]},
+                                        ]
+                                    }
+                                ]
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            workspace = root / "workspace"
+            self._run("init", "--workspace", str(workspace), "--engine", "rpg-maker-mz")
+            self._run("bind", "--workspace", str(workspace), "--game", str(game))
+            self._run("extract", "--workspace", str(workspace))
+            self._run("prepare", "--workspace", str(workspace))
+            prepared = json.loads(
+                (workspace / "translations" / "batches" / "tasks.json").read_text(encoding="utf-8")
+            )
+            mapping = {task["id"]: "离开" for task in prepared["tasks"]}
+            candidate = workspace / "translations" / "staging" / "candidate.json"
+            candidate.write_text(json.dumps(mapping, ensure_ascii=False), encoding="utf-8")
+
+            validation = self._run(
+                "validate", "--workspace", str(workspace), "--mapping", str(candidate)
+            )
+            validation_report = json.loads(validation.stdout)
+            review_ids = [task["id"] for task in validation_report["review_tasks"]]
+            self.assertTrue(review_ids)
+            rejected = subprocess.run(
+                [
+                    "python",
+                    str(SCRIPT),
+                    "accept",
+                    "--workspace",
+                    str(workspace),
+                    "--mapping",
+                    str(candidate),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("review evidence", rejected.stderr)
+
+            review = workspace / "translations" / "staging" / "review.json"
+            review.write_text(
+                json.dumps(validation_report["review_binding"], ensure_ascii=False),
+                encoding="utf-8",
+            )
+            incomplete_review = json.loads(review.read_text(encoding="utf-8"))
+            incomplete_review["reviewed_ids"] = []
+            review.write_text(json.dumps(incomplete_review), encoding="utf-8")
+            incomplete = subprocess.run(
+                [
+                    "python",
+                    str(SCRIPT),
+                    "accept",
+                    "--workspace",
+                    str(workspace),
+                    "--mapping",
+                    str(candidate),
+                    "--review",
+                    str(review),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+            )
+            self.assertNotEqual(incomplete.returncode, 0)
+            self.assertIn("cover exactly", incomplete.stderr)
+
+            incomplete_review["reviewed_ids"] = review_ids
+            incomplete_review["mapping_hash"] = "0" * 64
+            review.write_text(json.dumps(incomplete_review), encoding="utf-8")
+            stale = subprocess.run(
+                [
+                    "python",
+                    str(SCRIPT),
+                    "accept",
+                    "--workspace",
+                    str(workspace),
+                    "--mapping",
+                    str(candidate),
+                    "--review",
+                    str(review),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+            )
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertIn("mapping_hash", stale.stderr)
+
+            incomplete_review["mapping_hash"] = hashlib.sha256(
+                json.dumps(
+                    mapping, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                ).encode("utf-8")
+            ).hexdigest()
+            review.write_text(json.dumps(incomplete_review), encoding="utf-8")
+            accepted = self._run(
+                "accept",
+                "--workspace",
+                str(workspace),
+                "--mapping",
+                str(candidate),
+                "--review",
+                str(review),
+            )
+            self.assertEqual(json.loads(accepted.stdout)["quality_state"], "reviewed")
+
+            accepted_mapping = workspace / "translations" / "accepted" / "mapping.json"
+            accepted_mapping.write_text(json.dumps({review_ids[0]: "离开。"}), encoding="utf-8")
+            tampered = subprocess.run(
+                ["python", str(SCRIPT), "generate", "--workspace", str(workspace)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+            )
+            self.assertNotEqual(tampered.returncode, 0)
+            self.assertIn("acceptance record", tampered.stderr)
+
     def test_cli_resume_emits_only_unfinished_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

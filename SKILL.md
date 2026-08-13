@@ -1,11 +1,11 @@
 ---
 name: rpg-maker-localization
-description: Audit, continue, review, validate, and deliver safe Simplified Chinese localization for RPG Maker MV/MZ games. Use for unpacked games, existing localization projects, interrupted translation, prior-draft review, data JSON, event dialogue, translation memory, glossaries, external mappings, localization QA, version updates, or patch delivery.
+description: Use when auditing, continuing, reviewing, validating, or delivering Simplified Chinese localization for unpacked RPG Maker MV/MZ games, including existing localization projects, interrupted translation, prior drafts, data JSON, event dialogue, translation memory, glossaries, external mappings, localization QA, version updates, and patch delivery.
 ---
 
 # RPG Maker MV/MZ 汉化
 
-为已解包的 RPG Maker MV/MZ 游戏建立独立汉化工作区，以英语、日语或英日混合原文生成简体中文补丁。始终把译文质量、源结构安全和可验证交付作为完成条件。
+接管已有 RPG Maker MV/MZ 汉化项目，或在不存在现成体系时为已解包游戏建立独立工作区，以英语、日语或英日混合原文生成简体中文补丁。始终把译文质量、源结构安全和可验证交付作为完成条件。
 
 ## 入口分流
 
@@ -13,7 +13,16 @@ description: Audit, continue, review, validate, and deliver safe Simplified Chin
 - 已有项目以当前源码、测试、项目规则和真源文档为准；复用其 owner 与门禁，不另建 accepted、缓存或输出体系。审查旧译文时只报告有证据的问题，修订进入项目既有 staging。
 - 没有现成汉化工作区时，按下方新项目流程执行。真源冲突、旧译文无法绑定当前原文或必须覆盖现有 owner 时停止并报告。
 
-## 执行工作流
+## 已有项目流程
+
+1. 读取项目规则、真源索引和当前机器报告，确认源、正式 mapping、staging、生成物及门禁 owner。
+2. 使用项目现有脚本和恢复入口；默认不运行 Skill 自带的 `audit`、`init` 或 `bind`，除非项目规则明确采用这些命令。
+3. 按项目当前源快照重绑定候选，只在项目既有 staging 写入；不得从旧批次编号、旧路径或历史缓存恢复正式状态。
+4. 运行项目自己的结构、语义、生成和交付门禁，并按当前真源报告结果。
+
+## 新项目流程
+
+以下步骤只在入口分流确认不存在现成汉化工作区时执行：
 
 1. 先运行 `audit`，确认游戏目录、引擎、JSON 状态和加密资源。引擎为 unknown、数据目录冲突或 JSON 损坏时停止，不猜测。
 2. 运行 `init` 创建工作区，再运行 `bind` 绑定本机游戏路径。原游戏始终只读，工作区不得放在游戏内部。
@@ -22,9 +31,9 @@ description: Audit, continue, review, validate, and deliver safe Simplified Chin
 5. 运行 `prepare` 应用 exact-source 去重、翻译记忆和术语子集。不要把完整项目文档、完整术语表或历史 staging 复制给翻译 Agent。
 6. 让翻译 Agent 结合任务包中的必要上下文直接产出成稿级 mapping。保留控制码、占位符、变量、转义和源换行；不能确认的条目单列人工确认。
    若工作中断，运行 `checkpoint` 保存已完成的部分 mapping；下次运行 `resume`，只派发剩余任务。不要向翻译 Agent 重发全部旧译文。详细合同见 [workspace-contract.md](references/workspace-contract.md)。
-7. 对候选运行 `validate`。完整门禁与独立审计触发条件见 [quality-gates.md](references/quality-gates.md)。不要用独立审计全量重复首译；只复审有风险证据的条目与必要抽样。
-8. 只有当前候选通过门禁后才运行 `accept`。随后运行 `generate` 从原游戏重新生成补丁，再运行 `verify`。
-9. 报告实际命令、任务数、候选数、问题数、输出路径和未闭合风险。未运行实机游戏时，明确把游戏内字体、溢出、交互和图片文字列为待实机验收。
+7. 对候选运行 `validate`。完整门禁与独立审计触发条件见 [quality-gates.md](references/quality-gates.md)。不要用独立审计全量重复首译；只复审 `review_tasks` 与项目要求的必要抽样。
+8. `review_tasks` 非空时，先生成绑定当前源指纹、任务集合、候选哈希和完整风险 ID 的审查证据；存在未解决项时不得 `accept`。只有当前候选通过门禁后才运行 `accept`，随后运行 `generate` 从原游戏重新生成补丁，再运行 `verify`。
+9. 报告实际命令、任务数、候选数、问题数、输出路径和未闭合风险。未运行实机游戏且项目或用户仍将运行面列为验收范围时，明确列出字体、溢出、交互和图片文字等未覆盖项；若当前真源已取消或另立该验收，则遵守当前范围，不得恢复已取消的门禁，并准确说明本轮验收边界。
 
 ## CLI
 
@@ -41,7 +50,7 @@ python .\rpg_localize.py import-external --workspace <工作区> --input <外部
 python .\rpg_localize.py checkpoint --workspace <工作区> --mapping <部分mapping.json>
 python .\rpg_localize.py resume --workspace <工作区>
 python .\rpg_localize.py validate --workspace <工作区> --mapping <候选mapping.json>
-python .\rpg_localize.py accept --workspace <工作区> --mapping <候选mapping.json>
+python .\rpg_localize.py accept --workspace <工作区> --mapping <候选mapping.json> [--review <审查证据.json>]
 python .\rpg_localize.py generate --workspace <工作区>
 python .\rpg_localize.py verify --workspace <工作区>
 ```

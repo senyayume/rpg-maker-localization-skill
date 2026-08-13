@@ -11,6 +11,8 @@
 
 独立审计只在有证据时触发：歧义、关键新术语、选项、复杂指代、重要连续剧情、插件文本、自动门禁问题及分层抽样。审计只报告问题 ID、证据和建议；它不代替结构门禁，也不全量复写译文。
 
+`validate` 返回非空 `review_tasks` 时，`accept` 必须接收审查证据。以验证报告中的 `review_binding` 为模板，在完成语义复审后保持其中的 `source_fingerprint`、`task_set_hash`、`mapping_hash` 和完整 `reviewed_ids`，并确保 `unresolved_ids` 为空。任一绑定过期、风险 ID 缺失或仍有未解决项时失败关闭。没有风险复审任务的候选保持 `technical-pass`；完成当前风险复审合同的候选记为 `reviewed`。`generate` 会再次核对正式 mapping、任务集合与接受记录，禁止接受后手工改写。
+
 无法确认的条目进入人工确认清单，不得用占位译文放行。
 
 ## 复用信任
