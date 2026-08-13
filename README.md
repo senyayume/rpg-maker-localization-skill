@@ -89,7 +89,7 @@ python .\rpg_localize.py prepare --workspace <汉化工作区>
 
 ```powershell
 python .\rpg_localize.py validate --workspace <汉化工作区> --mapping <候选mapping.json>
-python .\rpg_localize.py accept --workspace <汉化工作区> --mapping <候选mapping.json>
+python .\rpg_localize.py accept --workspace <汉化工作区> --mapping <候选mapping.json> [--review <审查证据.json>]
 python .\rpg_localize.py generate --workspace <汉化工作区>
 python .\rpg_localize.py verify --workspace <汉化工作区>
 ```
@@ -150,6 +150,8 @@ python .\rpg_localize.py resume --workspace <汉化工作区>
 - `provisional`：断点候选，只证明能够与当前任务绑定，不证明语义正确。
 - `technical-pass`：通过结构、控制码、占位符、换行、术语和残留检查。
 - `reviewed`：在技术门禁基础上，完成项目或任务明确要求的语义复审范围；报告必须写明已审范围、抽样规则和未审范围。
+
+`validate` 返回非空 `review_tasks` 时，`accept` 要求 `--review`。复制验证报告的 `review_binding` 作为审查证据模板，完成列出的风险任务复审，并确保 `unresolved_ids` 为空；证据过期、覆盖不完整或仍有未解决项都会阻断正式接受。没有风险复审任务的候选仍可作为 `technical-pass` 接受。`generate` 会再次核对正式 mapping、任务集合与接受记录，禁止接受后手工改写。
 
 未经审查的检查点不会自动成为术语、译风示例或可靠翻译记忆。发现旧译文错误时，应使相关候选和派生记忆失效；同文不同义必须记录项目级语境覆盖，不进行无证据的全局覆盖。详细合同见 [`references/workspace-contract.md`](references/workspace-contract.md) 和 [`references/quality-gates.md`](references/quality-gates.md)。
 
